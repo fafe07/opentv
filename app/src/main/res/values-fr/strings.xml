@@ -389,6 +389,10 @@
     <string name="vod_watch_now">Regarder maintenant</string>
     <string name="vod_resume">Reprendre</string>
     <string name="vod_addon_sources">Sources d\'extensions</string>
+    <string name="vod_download">Télécharger</string>
+    <string name="vod_download_started">Téléchargement de %1$s — suivez la progression dans les notifications</string>
+    <string name="vod_download_unsupported">Ce flux ne peut pas être téléchargé (playlist de streaming ou lien non pris en charge)</string>
+    <string name="vod_download_failed">Échec du téléchargement : %1$s</string>
     <string name="vod_addon_pick_title">Choisissez un flux</string>
     <string name="vod_addon_loading">Recherche de flux auprès de vos extensions…</string>
     <string name="vod_addon_none">Aucun flux trouvé auprès de vos extensions pour ce titre. Il faut une clé TMDB configurée (pour la correspondance IMDb) et une extension qui la propose.</string>
