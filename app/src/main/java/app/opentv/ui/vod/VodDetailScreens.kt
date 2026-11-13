@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
@@ -52,7 +53,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import android.widget.Toast
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -89,6 +92,7 @@ fun MovieDetailScreen(
     val playFocus = remember { FocusRequester() }
     val hasAddons by viewModel.hasAddons.collectAsState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     // null = the add-on picker is closed; a (possibly empty) list = show it. Separate flag for the spinner.
     var addonStreams by remember(movieId) { mutableStateOf<List<StremioStream>?>(null) }
     var addonLoading by remember(movieId) { mutableStateOf(false) }
@@ -125,6 +129,23 @@ fun MovieDetailScreen(
                 ) {
                     viewModel.toggleMovieFavourite(m)
                     movie = m.copy(favourite = !m.favourite)
+                }
+                DetailButton(
+                    icon = Icons.Filled.Download,
+                    label = stringResource(R.string.vod_download),
+                ) {
+                    scope.launch {
+                        val ua = viewModel.userAgentForSource(m.sourceId)
+                        val msg = when (val r = MovieDownloader.enqueue(context, m, ua)) {
+                            is MovieDownloader.Result.Started ->
+                                context.getString(R.string.vod_download_started, r.fileName)
+                            MovieDownloader.Result.Unsupported ->
+                                context.getString(R.string.vod_download_unsupported)
+                            is MovieDownloader.Result.Failed ->
+                                context.getString(R.string.vod_download_failed, r.reason)
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                    }
                 }
                 // Only when the user has add-ons set up — queries them for this film's streams.
                 if (hasAddons) {
