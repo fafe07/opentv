@@ -136,15 +136,7 @@ fun MovieDetailScreen(
                 ) {
                     scope.launch {
                         val ua = viewModel.userAgentForSource(m.sourceId)
-                        val msg = when (val r = MovieDownloader.enqueue(context, m, ua)) {
-                            is MovieDownloader.Result.Started ->
-                                context.getString(R.string.vod_download_started, r.fileName)
-                            MovieDownloader.Result.Unsupported ->
-                                context.getString(R.string.vod_download_unsupported)
-                            is MovieDownloader.Result.Failed ->
-                                context.getString(R.string.vod_download_failed, r.reason)
-                        }
-                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        showDownloadResult(context, MovieDownloader.enqueue(context, m, ua))
                     }
                 }
                 // Only when the user has add-ons set up — queries them for this film's streams.
@@ -288,6 +280,8 @@ fun SeriesDetailScreen(
     var series by remember(seriesId) { mutableStateOf<Series?>(null) }
     var moreLike by remember(seriesId) { mutableStateOf<List<Series>>(emptyList()) }
     val favFocus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(seriesId) {
         val loaded = viewModel.seriesDetail(seriesId)
@@ -356,7 +350,12 @@ fun SeriesDetailScreen(
                     SectionHeader(stringResource(R.string.vod_season, season))
                 }
                 items(eps, key = { it.id }) { ep ->
-                    EpisodeRow(ep, onPlayEpisode)
+                    EpisodeRow(ep, onPlayEpisode) {
+                        scope.launch {
+                            val ua = viewModel.userAgentForSource(ep.sourceId)
+                            showDownloadResult(context, MovieDownloader.enqueue(context, ep, s.displayTitle, ua))
+                        }
+                    }
                 }
             }
         }
@@ -629,6 +628,16 @@ private fun PersonChip(name: String, onClick: () -> Unit) {
     )
 }
 
+/** Starts a download and tells the user how it went. */
+private fun showDownloadResult(context: android.content.Context, r: MovieDownloader.Result) {
+    val msg = when (r) {
+        is MovieDownloader.Result.Started -> context.getString(R.string.vod_download_started, r.fileName)
+        MovieDownloader.Result.Unsupported -> context.getString(R.string.vod_download_unsupported)
+        is MovieDownloader.Result.Failed -> context.getString(R.string.vod_download_failed, r.reason)
+    }
+    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+}
+
 /** A focusable pill button for the hero — Watch/Resume and the favourite toggle. */
 @Composable
 private fun DetailButton(
@@ -670,40 +679,71 @@ private fun DetailButton(
 
 /** One episode row: season/episode marker, title, and a focus highlight; plays on click. */
 @Composable
-private fun EpisodeRow(ep: Episode, onPlay: (mediaKey: String, url: String, title: String) -> Unit) {
+private fun EpisodeRow(
+    ep: Episode,
+    onPlay: (mediaKey: String, url: String, title: String) -> Unit,
+    onDownload: () -> Unit,
+) {
     var focused by remember { mutableStateOf(false) }
+    var dlFocused by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 3.dp)
-            .onFocusChanged { focused = it.isFocused }
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (focused) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface,
-            )
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                else Modifier,
-            )
-            .clickable {
-                onPlay("ep:${ep.id}", ep.streamUrl, "S${ep.season}E${ep.episodeNumber} · ${ep.title}")
-            }
-            .padding(14.dp),
+            .padding(horizontal = 24.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "S${ep.season}E${ep.episodeNumber}",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.width(72.dp),
-        )
-        Text(
-            ep.title,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(
+            Modifier
+                .weight(1f)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (focused) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surface,
+                )
+                .then(
+                    if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                    else Modifier,
+                )
+                .clickable {
+                    onPlay("ep:${ep.id}", ep.streamUrl, "S${ep.season}E${ep.episodeNumber} · ${ep.title}")
+                }
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "S${ep.season}E${ep.episodeNumber}",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.width(72.dp),
+            )
+            Text(
+                ep.title,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        // Separate focus target so a TV remote can reach it with right-arrow.
+        Box(
+            Modifier
+                .onFocusChanged { dlFocused = it.isFocused }
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (dlFocused) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.surface,
+                )
+                .clickable(onClick = onDownload)
+                .padding(14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Download,
+                contentDescription = stringResource(R.string.vod_download),
+                tint = if (dlFocused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            )
+        }
     }
 }
 

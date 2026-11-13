@@ -10,6 +10,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import app.opentv.data.model.Episode
 import app.opentv.data.model.Movie
 import app.opentv.data.parser.displayTitle
 
@@ -30,19 +31,37 @@ object MovieDownloader {
         data class Failed(val reason: String) : Result
     }
 
-    fun enqueue(context: Context, movie: Movie, userAgent: String): Result {
-        val url = movie.streamUrl.trim()
+    fun enqueue(context: Context, movie: Movie, userAgent: String): Result =
+        enqueue(context, movie.streamUrl, movie.displayTitle, movie.containerExtension, userAgent)
+
+    /** An episode, saved as "Show - S01E02 - Title.ext". */
+    fun enqueue(context: Context, episode: Episode, seriesTitle: String, userAgent: String): Result {
+        val code = "S%02dE%02d".format(episode.season, episode.episodeNumber)
+        val title = listOf(seriesTitle, code, episode.title)
+            .map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            .joinToString(" - ")
+        return enqueue(context, episode.streamUrl, title, null, userAgent)
+    }
+
+    private fun enqueue(
+        context: Context,
+        streamUrl: String,
+        title: String,
+        containerExtension: String?,
+        userAgent: String,
+    ): Result {
+        val url = streamUrl.trim()
         val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return Result.Unsupported
         val scheme = uri.scheme?.lowercase()
         if (scheme != "http" && scheme != "https") return Result.Unsupported
 
-        val ext = extensionFor(movie, uri)
+        val ext = extensionFor(containerExtension, uri)
         if (ext == "m3u8" || ext == "m3u" || ext == "mpd") return Result.Unsupported
 
-        val fileName = "${sanitize(movie.displayTitle)}.$ext"
+        val fileName = "${sanitize(title)}.$ext"
         return try {
             val request = DownloadManager.Request(uri)
-                .setTitle(movie.displayTitle)
+                .setTitle(title)
                 .setDescription("OpenTV")
                 .addRequestHeader("User-Agent", userAgent)
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
@@ -63,8 +82,8 @@ object MovieDownloader {
         }
     }
 
-    private fun extensionFor(movie: Movie, uri: Uri): String {
-        movie.containerExtension
+    private fun extensionFor(containerExtension: String?, uri: Uri): String {
+        containerExtension
             ?.trim()?.trimStart('.')?.lowercase()
             ?.takeIf { it.isNotEmpty() && it.length <= 5 && it.all(Char::isLetterOrDigit) }
             ?.let { return it }
@@ -81,5 +100,5 @@ object MovieDownloader {
         name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_")
             .trim().trim('.')
             .take(120)
-            .ifEmpty { "movie" }
+            .ifEmpty { "video" }
 }
